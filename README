@@ -1,0 +1,16 @@
+# final four basket ball picks prognosticator
+
+this project is a self-contained web page that will generate a series of picks
+for you for the NCAA basketball tournament. my idea is that you keep running it
+until you come up with a set that you're happy with, but it can be used however
+you want.
+
+
+here are some enhancements i want to make:
+- JSON object [via textarea]in addition to text input boxes for an atlernative
+  way to enter teams
+- generated bracket should show up above text entry boxes
+- rework regions data structure to be a hash [keyed on region name] instead of
+  an array
+- add config switch for how many upsets to allow
+
