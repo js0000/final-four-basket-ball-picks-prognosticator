@@ -5,12 +5,8 @@ for you for the NCAA basketball tournament. my idea is that you keep running it
 until you come up with a set that you're happy with, but it can be used however
 you want.
 
+a new version featuring 
+- json support
+- better: colors, layout, docs
 
-here are some enhancements i want to make:
-- JSON object [via textarea]in addition to text input boxes for an atlernative
-  way to enter teams
-- generated bracket should show up above text entry boxes
-- rework regions data structure to be a hash [keyed on region name] instead of
-  an array
-- add config switch for how many upsets to allow
-
+still needs better data validation.

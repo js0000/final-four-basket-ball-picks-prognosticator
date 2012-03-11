@@ -2,19 +2,22 @@
   <head>
 
     <script type="text/javascript">
-      // copyright 2010 john saylor, distributed under terms of gpl
-      function Region( name ) {
-        this.name = name;
-	this.team = [];
-	this.winner = [];
-        this.game = [];
-	this.complete = false;
-      };
+      // copyright 2010, 2012 john saylor, distributed under terms of gpl
       
       var ffbbpp = {
         teams : {},
+	region_names : [ 'A', 'B', 'X', 'Y' ],
 	regions : [],
         final_four : undefined,
+
+        // object used to hold input
+	Region : function( n ) {
+          this.name = n;
+	  this.team_names = [];
+	  this.winner_names = [];
+          this.games = [];
+	  this.complete = false;
+        },
 
 	generate_bracket : function() {
 	  
@@ -29,32 +32,40 @@
 	    alert( 'could not populate teams and regions' );
 	    return false;
 	  }
-	 
-          ffbbpp.final_four = new Region( 'final_four' );
+	  else {
+	    // FIXME: need routine to verfiy that data structures are ok and populated correctly
 
-          var i;
-	  for( i = 0; i < ffbbpp.regions.length; i++ ) {
-	    var count = 0;
-	    while ( ( ! ffbbpp.regions[i].complete ) && ( count < 16 ) ) {
-	      ffbbpp.run_region( ffbbpp.regions[i] );
-	      count++;
-            }
-	  }
-          
-	  ok = ffbbpp.run_final_four();
-	  if ( ! ok ) {
-	    alert( 'could not run final four' );
-	    return false;
-	  }
-	  
-          ok = ffbbpp.print_results();
-	  
-          if ( ! ok ) {
-	    alert( 'could not run final four' );
-	    return false;
-	  }
-          
-          return true;
+            // need this so that it can get populated 
+  	    ffbbpp.final_four = new ffbbpp.Region( 'final_four' );
+  	    
+	    // to hold data for determining seeds of the members of final_four region based on the seeds of their [losing] opponents
+  	    ffbbpp.final_four.seeds = [];
+  
+            var i;
+  	    for( i = 0; i < ffbbpp.regions.length; i++ ) {
+  	      // safety
+	      var count = 0;
+  	      while ( ( ! ffbbpp.regions[i].complete ) && ( count < 16 ) ) {
+  	        ffbbpp.run_region( ffbbpp.regions[i] );
+  	        count++;
+              }
+  	    }
+            
+  	    ok = ffbbpp.run_final_four();
+  	    if ( ! ok ) {
+  	      alert( 'could not run final four' );
+  	      return false;
+  	    }
+	    else {
+              ok = ffbbpp.print_results();
+              if ( ! ok ) {
+  	        alert( 'could not print_results' );
+  	        return false;
+  	      }
+	    }  
+          }
+
+          return false;
 	},
 
 	
@@ -64,86 +75,153 @@
 	    alert( 'could not find teams' );
 	    return false;
 	  }
+
+          var JSONteams;
+	  var json_string = HTMLteams.elements['mass_input'].value;
+	  try {
+	    JSONteams = JSON.parse( json_string );
+	  }
+	  catch( e ) {
+            //alert( 'e.name: ' + e.name + "\n" + 'e.message: ' + e.message );
+	    JSONteams = false;
+	  }
 	  
-	  var regions = [ 'east', 'midwest', 'south', 'west' ];
-	  var codes = [];
+	  // look for a1
+	  var return_value = true;
+	  var alphanumeric = /\w+/;
+	  if( ( JSONteams ) && ( alphanumeric.test( JSONteams['A'][0].name ) ) ) {
+	    ffbbpp.process_mass_entry( JSONteams );
+	  }
+	  else if( alphanumeric.test( HTMLteams.elements['a1'].value ) ) {
+	    ffbbpp.process_individual_entry( HTMLteams );
+	  }
+	  else {
+	    return_value = false;
+	  }
+
+	  return return_value;
+        },
+
+	process_individual_entry : function( teams_form ) {
 	  var i;
 	  var j;
-	  var count;
-	  count = 1;
-	  for( i = 0; i < regions.length; i++ ) {
+	  var return_value = true;
+	  for( i = 0; i < ffbbpp.region_names.length; i++ ) {
+	    ffbbpp.regions.push( new ffbbpp.Region( ffbbpp.region_names[i] ) );
 
-	    ffbbpp.regions[i] = new Region( regions[i] );
+            // see if a bracket winner has been declared and save value
+	    var win_value;
+	    var tmp_name = ffbbpp.region_names[i].toLowerCase() + 'win';
+	    for( j = 0; j < teams_form.elements[tmp_name].length; j++ ) {
+	      if( teams_form.elements[tmp_name][j].checked ) {
+	        win_value = teams_form.elements[tmp_name][j].value;
+	      }
+	    }
 
+            // loop through teams in bracket
 	    for( j = 1; j < 17; j++ ) {
-	      var first_letter = regions[i].substr(0,1);
-	      var tmp_name = first_letter + j;
-	      var tmp_value = HTMLteams.elements[tmp_name].value;
+	      tmp_name = ffbbpp.region_names[i].toLowerCase() + j;
+	      var tmp_value = teams_form.elements[tmp_name].value;
 
               if ( ! tmp_value ) {
 	        alert( 'missing value for ' + tmp_name );
-		return false;
+		return_value = false;
+		break;
 	      }
+	      else {
+                var abbr = tmp_value.substr(0,3) + '_' + j + ffbbpp.region_names[i].toLowerCase();
+                var win_status = false;
+	        if( j == win_value ) {
+	          win_status = true;
+	        }
 
-              var abbr = tmp_value.substr(0,1) + count;
-	      count++;
-
-	      ffbbpp.teams[abbr] = { name : tmp_value, seed : j };
-              var idx = j - 1;
-	      ffbbpp.regions[i].team[idx] = abbr;
+	        ffbbpp.teams[abbr] = { name : tmp_value, seed : j, winner : win_status };
+	        ffbbpp.regions[i].team_names.push( abbr );
+	      }
 	    }
 	  }
-          return true;
+          return return_value;
 	},
 
+	process_mass_entry : function( teams_json ) {
+	  var i;
+	  var j;
+	  var return_value = true;
+	  for( i = 0; i < ffbbpp.region_names.length; i++ ) {
+	    ffbbpp.regions.push( new ffbbpp.Region( ffbbpp.region_names[i] ) );
+            
+            // sort, then loop through teams in bracket
+	    teams_json[ffbbpp.region_names[i]].sort( ffbbpp.sort_by_seed );
+	    for( j = 0; j < teams_json[ffbbpp.region_names[i]].length; j++ ) {
+	      var tmp_value = teams_json[ffbbpp.region_names[i]][j].name;
+
+              if ( ! tmp_value ) {
+	        alert( 'missing value for region: ' + ffbbpp.region_names[i] + ', array index: ' + ( j + 1 ) );
+		return_value = false;
+		break;
+	      }
+	      else {
+                var abbr = tmp_value.substr(0,3) + '_' + teams_json[ffbbpp.region_names[i]][j].seed + ffbbpp.region_names[i].toLowerCase();
+                var win_status = false;
+	        if( teams_json[ffbbpp.region_names[i]][j].winner ) {
+	          win_status = true;
+	        }
+
+	        ffbbpp.teams[abbr] = { name : tmp_value, seed : parseInt( teams_json[ffbbpp.region_names[i]][j].seed ), winner : win_status };
+	        ffbbpp.regions[i].team_names.push( abbr );
+	      }
+	    }
+	  }
+          return return_value;
+	},
 
 	run_region : function( region ) {
 
-	  if ( ! region.winner[0] ) {
-	    region.winner[0] = ffbbpp.play( region.team[0], region.team[15], region.game );
-	    region.winner[1] = ffbbpp.play( region.team[7], region.team[8], region.game );
-	    region.winner[2] = ffbbpp.play( region.team[4], region.team[11], region.game );
-	    region.winner[3] = ffbbpp.play( region.team[3], region.team[12], region.game );
-	    region.winner[4] = ffbbpp.play( region.team[5], region.team[10], region.game );
-	    region.winner[5] = ffbbpp.play( region.team[2], region.team[13], region.game );
-	    region.winner[6] = ffbbpp.play( region.team[6], region.team[9], region.game );
-	    region.winner[7] = ffbbpp.play( region.team[1], region.team[14], region.game );
+          // first round
+	  if ( ! region.winner_names[0] ) {
+	    region.winner_names.push( ffbbpp.play( region.team_names[0], region.team_names[15], region.games ) );
+	    region.winner_names.push( ffbbpp.play( region.team_names[7], region.team_names[8], region.games ) );
+	    region.winner_names.push( ffbbpp.play( region.team_names[4], region.team_names[11], region.games ) );
+	    region.winner_names.push( ffbbpp.play( region.team_names[3], region.team_names[12], region.games ) );
+	    region.winner_names.push( ffbbpp.play( region.team_names[5], region.team_names[10], region.games ) );
+	    region.winner_names.push( ffbbpp.play( region.team_names[2], region.team_names[13], region.games ) );
+	    region.winner_names.push( ffbbpp.play( region.team_names[6], region.team_names[9], region.games ) );
+	    region.winner_names.push( ffbbpp.play( region.team_names[1], region.team_names[14], region.games ) );
 	  }
-	  else if ( ! region.winner[8] ) {
-	    region.winner[8] = ffbbpp.play( region.winner[0], region.winner[1], region.game );
-	    region.winner[9] = ffbbpp.play( region.winner[2], region.winner[3], region.game );
-	    region.winner[10] = ffbbpp.play( region.winner[4], region.winner[5], region.game );
-	    region.winner[11] = ffbbpp.play( region.winner[6], region.winner[7], region.game );
+	  // second round
+	  else if ( ! region.winner_names[8] ) {
+	    region.winner_names.push( ffbbpp.play( region.winner_names[0], region.winner_names[1], region.games ) );
+	    region.winner_names.push( ffbbpp.play( region.winner_names[2], region.winner_names[3], region.games ) );
+	    region.winner_names.push( ffbbpp.play( region.winner_names[4], region.winner_names[5], region.games ) );
+	    region.winner_names.push( ffbbpp.play( region.winner_names[6], region.winner_names[7], region.games ) );
 	  }
-	  else if ( ! region.winner[12] ) {
-	    region.winner[12] = ffbbpp.play( region.winner[8], region.winner[9], region.game );
-	    region.winner[13] = ffbbpp.play( region.winner[10], region.winner[11], region.game );
+          // sweet sixteen
+	  else if ( ! region.winner_names[12] ) {
+	    region.winner_names.push( ffbbpp.play( region.winner_names[8], region.winner_names[9], region.games ) );
+	    region.winner_names.push( ffbbpp.play( region.winner_names[10], region.winner_names[11], region.games ) );
 	  }
-	  else if ( ! region.winner[14] ) {
-	    region.winner[14] = ffbbpp.play( region.winner[12], region.winner[13], region.game );
+	  // elite eight
+	  else if ( ! region.winner_names[14] ) {
+	    region.winner_names.push( ffbbpp.play( region.winner_names[12], region.winner_names[13], region.games ) );
 	  }
+	  // prepare final four
 	  else {
 
 	    region.complete = true;
-	   
-	    ffbbpp.create_HTML( region );
 
-	    if ( region.name == 'east' ) {
-	      ffbbpp.final_four.team[2] = region.winner[14];
+	    // push total loser_seeds to ffbbpp.final_four.seeds
+	    // but square them so they can be better differentiated
+	    tls = 0;
+	    for( var i = 0; i < region.games.length; i++ ) {
+	      if( region.games[i].w == region.winner_names[14] ) {
+	        tls += ( region.games[i].ls * region.games[i].ls );
+	      }
 	    }
-	    else if ( region.name == 'midwest' ) {
-	      ffbbpp.final_four.team[0] = region.winner[14];
-	    }
-	    else if ( region.name == 'south' ) {
-	      ffbbpp.final_four.team[3] = region.winner[14];
-	    }
-	    else if ( region.name == 'west' ) {
-	      ffbbpp.final_four.team[1] = region.winner[14];
-	    }
-	    else {
-	      alert( 'unknown region: ' + region.name );
-	      return false;
-	    }  
+
+	    ffbbpp.final_four.seeds.push( { name : region.winner_names[14], total_loser_seeds : tls } );
+	    
+	    ffbbpp.final_four.team_names.push( region.winner_names[14] );
+	    ffbbpp.create_HTML( region );
 	  }
 	},
 
@@ -152,22 +230,23 @@
          
 	 var ff = ffbbpp.final_four;
 	    
-	 if ( 
-	   ( ! ff.team[0] ) 
-	   || 
-	   ( ! ff.team[1] ) 
-	   || 
-	   ( ! ff.team[2] ) 
-	   || 
-	   ( ! ff.team[3] ) 
-	  ) {
-	    alert( 'cannot compute final four, missing data' );
+	 if ( ! ( ff.team_names.length == 4 ) ) {
+	    alert( 'cannot compute final four, invalid data' );
 	    return false;
 	  }
+
+	  // resort seeds based on total_loser_seeds [lower is better]
+          ff.seeds.sort( ffbbpp.sort_by_tls );
+          for( var i = 0; i < ff.seeds.length; i++ ) {
+	    var n = ff.seeds[i].name;
+	    var s = i + 1;
+	    ffbbpp.teams[n].original_seed = ffbbpp.teams[n].seed;
+	    ffbbpp.teams[n].seed = s;
+	  }
 	 
-	  ff.winner[0] = ffbbpp.play( ff.team[0], ff.team[1], ff.game );
-          ff.winner[1] = ffbbpp.play( ff.team[2], ff.team[3], ff.game );
-          ff.winner[2] = ffbbpp.play( ff.winner[0], ff.winner[1], ff.game );
+	  ff.winner_names.push( ffbbpp.play( ff.team_names[0], ff.team_names[1], ff.games ) );
+          ff.winner_names.push( ffbbpp.play( ff.team_names[2], ff.team_names[3], ff.games ) );
+          ff.winner_names.push( ffbbpp.play( ff.winner_names[0], ff.winner_names[1], ff.games ) );
           
 	  // don't think this is really needed, but ...
 	  ff.complete = true;
@@ -185,18 +264,25 @@
 	    return false;
 	  }
 
+          // winner from radio button selection
+          if( teamA.winner ) {
+	    g.push( { w : a, l : b, ls : teamB.seed } )
+	    return a;
+	  }
+	  else if( teamB.winner ) {
+	    g.push( { w : b, l : a, ls : teamA.seed } )
+	    return b;
+	  }
           var a_seed =  17 - teamA.seed;
           var b_seed = 17 - teamB.seed;
 
-	  // increase winner's chances in mid-long odds
+	  // increase higher seeds chances
           var a_b_abs = Math.abs( a_seed - b_seed );
-	  if ( a_b_abs > 4 ) {
-	    if ( a_seed > b_seed ) {
-	      a_seed += a_b_abs;
-	    }
-	    else if ( b_seed > a_seed ) {
-	      b_seed += a_b_abs;
-	    }
+	  if ( a_seed > b_seed ) {
+	    a_seed += a_b_abs;
+	  }
+	  else if ( b_seed > a_seed ) {
+	    b_seed += a_b_abs;
 	  }
 
 	  var hat = [];
@@ -215,11 +301,13 @@
 	  var idx = Math.floor( Math.random() * hat.length );
 	  var winner = hat[idx];
           var loser = a;
+	  var loser_seed = teamA.seed;
 	  if ( hat[idx] == a ) {
 	    loser = b;
+	    loser_seed = teamB.seed;
 	  }
 	
-	  g.push( { w : winner, l : loser } )
+	  g.push( { w : winner, l : loser, ls : loser_seed } )
 	  return hat[idx];
 	},
 
@@ -240,76 +328,76 @@
        create_HTML : function( region ) {
 
 	 var li14 = document.createElement( 'li' );
-	 ffbbpp.add_winner_loser_text_to_li( li14, region.game[14] );
+	 ffbbpp.add_winner_loser_text_to_li( li14, region.games[14] );
 	 var ul14 = document.createElement( 'ul' );
 	 li14.appendChild( ul14 );
 	 
          var li13 = document.createElement( 'li' );
-	 ffbbpp.add_winner_loser_text_to_li( li13, region.game[13] );
+	 ffbbpp.add_winner_loser_text_to_li( li13, region.games[13] );
          ul14.appendChild( li13 );
 	 var ul13 = document.createElement( 'ul' );
 	 li13.appendChild( ul13 );
 
          var li12 = document.createElement( 'li' );
-	 ffbbpp.add_winner_loser_text_to_li( li12, region.game[12] );
+	 ffbbpp.add_winner_loser_text_to_li( li12, region.games[12] );
          ul14.appendChild( li12 );
 	 var ul12 = document.createElement( 'ul' );
 	 li12.appendChild( ul12 );
 
          var li11 = document.createElement( 'li' );
-	 ffbbpp.add_winner_loser_text_to_li( li11, region.game[11] );
+	 ffbbpp.add_winner_loser_text_to_li( li11, region.games[11] );
          ul13.appendChild( li11 );
 	 var ul11 = document.createElement( 'ul' );
 	 li11.appendChild( ul11 );
          
          var li10 = document.createElement( 'li' );
-	 ffbbpp.add_winner_loser_text_to_li( li10, region.game[10] );
+	 ffbbpp.add_winner_loser_text_to_li( li10, region.games[10] );
          ul13.appendChild( li10 );
 	 var ul10 = document.createElement( 'ul' );
 	 li10.appendChild( ul10 );
          
          var li9 = document.createElement( 'li' );
-	 ffbbpp.add_winner_loser_text_to_li( li9, region.game[9] );
+	 ffbbpp.add_winner_loser_text_to_li( li9, region.games[9] );
          ul12.appendChild( li9 );
 	 var ul9 = document.createElement( 'ul' );
 	 li9.appendChild( ul9 );
          
 	 var li8 = document.createElement( 'li' );
-	 ffbbpp.add_winner_loser_text_to_li( li8, region.game[8] );
+	 ffbbpp.add_winner_loser_text_to_li( li8, region.games[8] );
          ul12.appendChild( li8 );
 	 var ul8 = document.createElement( 'ul' );
 	 li8.appendChild( ul8 );
          
 	 var li7 = document.createElement( 'li' );
-	 ffbbpp.add_winner_loser_text_to_li( li7, region.game[7] );
+	 ffbbpp.add_winner_loser_text_to_li( li7, region.games[7] );
          ul11.appendChild( li7 );
          
 	 var li6 = document.createElement( 'li' );
-	 ffbbpp.add_winner_loser_text_to_li( li6, region.game[6] );
+	 ffbbpp.add_winner_loser_text_to_li( li6, region.games[6] );
          ul11.appendChild( li6 );
          
 	 var li5 = document.createElement( 'li' );
-	 ffbbpp.add_winner_loser_text_to_li( li5, region.game[5] );
+	 ffbbpp.add_winner_loser_text_to_li( li5, region.games[5] );
          ul10.appendChild( li5 );
          
 	 var li4 = document.createElement( 'li' );
-	 ffbbpp.add_winner_loser_text_to_li( li4, region.game[4] );
+	 ffbbpp.add_winner_loser_text_to_li( li4, region.games[4] );
          ul10.appendChild( li4 );
          
 	 var li3 = document.createElement( 'li' );
-	 ffbbpp.add_winner_loser_text_to_li( li3, region.game[3] );
+	 ffbbpp.add_winner_loser_text_to_li( li3, region.games[3] );
          ul9.appendChild( li3 );
          
 	 var li2 = document.createElement( 'li' );
-	 ffbbpp.add_winner_loser_text_to_li( li2, region.game[2] );
+	 ffbbpp.add_winner_loser_text_to_li( li2, region.games[2] );
          ul9.appendChild( li2 );
          
 	 var li1 = document.createElement( 'li' );
-	 ffbbpp.add_winner_loser_text_to_li( li1, region.game[1] );
+	 ffbbpp.add_winner_loser_text_to_li( li1, region.games[1] );
          ul8.appendChild( li1 );
          
 	 var li0 = document.createElement( 'li' );
-	 ffbbpp.add_winner_loser_text_to_li( li0, region.game[0] );
+	 ffbbpp.add_winner_loser_text_to_li( li0, region.games[0] );
          ul8.appendChild( li0 );
 	 
 	 var f = document.createDocumentFragment();
@@ -336,18 +424,18 @@
        print_results : function() {
          
 	 var li2 = document.createElement( 'li' )
-	 ffbbpp.add_winner_loser_text_to_li( li2, ffbbpp.final_four.game[2] );
+	 ffbbpp.add_winner_loser_text_to_li( li2, ffbbpp.final_four.games[2] );
 	 var ul2 = document.createElement( 'ul' );
 	 li2.appendChild( ul2 );
 
 	 var li1 = document.createElement( 'li' )
-	 ffbbpp.add_winner_loser_text_to_li( li1, ffbbpp.final_four.game[1] );
+	 ffbbpp.add_winner_loser_text_to_li( li1, ffbbpp.final_four.games[1] );
 	 ul2.appendChild( li1 );
 	 var ul1 = document.createElement( 'ul' );
 	 li1.appendChild( ul1 );
 
 	 var li0 = document.createElement( 'li' )
-	 ffbbpp.add_winner_loser_text_to_li( li0, ffbbpp.final_four.game[0] );
+	 ffbbpp.add_winner_loser_text_to_li( li0, ffbbpp.final_four.games[0] );
 	 ul2.appendChild( li0 );
 	 var ul0 = document.createElement( 'ul' );
 	 li0.appendChild( ul0 );
@@ -355,16 +443,16 @@
          // attach region results
 	 var i;
 	 for( i = 0; i < ffbbpp.regions.length; i++ ) {
-	   if ( ffbbpp.regions[i].name == 'midwest' ) {
+	   if ( ffbbpp.regions[i].name == 'A' ) {
 	     ul0.appendChild( ffbbpp.regions[i].fragment );
 	   }
-	   else if ( ffbbpp.regions[i].name == 'west' ) {
+	   else if ( ffbbpp.regions[i].name == 'B' ) {
 	     ul0.appendChild( ffbbpp.regions[i].fragment );
 	   }
-	   else if ( ffbbpp.regions[i].name == 'east' ) {
+	   else if ( ffbbpp.regions[i].name == 'X' ) {
 	     ul1.appendChild( ffbbpp.regions[i].fragment );
 	   }
-	   else if ( ffbbpp.regions[i].name == 'south' ) {
+	   else if ( ffbbpp.regions[i].name == 'Y' ) {
 	     ul1.appendChild( ffbbpp.regions[i].fragment );
 	   }
 	   else {
@@ -377,6 +465,7 @@
 	 bracket.appendChild( li2 );
 
          var p = document.createElement( 'p' );
+	 p.className = 'print';
 	 var now = new Date();
 	 var t = document.createTextNode( 'bracket generated: ' + now.toGMTString() );
 	 p.appendChild( t );
@@ -387,17 +476,57 @@
 	 generated_bracket.appendChild( p );
 	 
 	 return true;
-       }
+       },
+
+       sort_by_tls : function( a, b ) {
+         return a.total_loser_seeds - b.total_loser_seeds;
+       },
+       
+       sort_by_seed : function( a, b ) {
+         return a.seed - b.seed;
+       },
+
+
+       init : function() {
+         // attach button click handler [simple method]
+	 var btn = document.getElementById( 'gen' );
+	 btn.onclick = ffbbpp.generate_bracket; 
+	 
+	 // display Mass Entry elements if browser can handle it
+	 var me_ids = [ 'me_textarea', 'me_help' ];
+	 if( ( JSON ) && ( JSON.parse ) ) {
+	   for( var i = 0; i < me_ids.length; i++ ) {
+	     var me = document.getElementById( me_ids[i] );
+	     if( me ) { 
+	       me.className = ''; 
+	     }
+	   }
+	 }
+       },
 
       };
     </script>
 
     <style type="text/css">
-     h1, h2, table.region caption, table.region thead * { font-family: Verdana, Helvetica, sans; color: #88b; }
-     table.region { border: 4px solid #88b; float: left; margin: 16px 8px; }
-     table.region caption { font-size: large; }
-     table.region caption, table.region thead * { font-weight: bold; }
-     p.clear { clear: both; float: none; }
+     @media screen {
+       body { margin: 5%; background-color: #f8e3c2; color: #b93920; }
+       body, button { font-family: Georgia, Palatino, serif; }
+       h1, h2, h3, table.region caption, table.region thead * { font-family: Verdana, Helvetica, sans-serif; }
+       h1:hover:after { 
+         content: attr(title); 
+	 font-size: small;
+	 color: gray;
+	 padding: 8px;
+       }
+       div.hide { display: none; }
+       table.region { border: 4px solid #b93920; float: left; margin: 16px 8px; }
+       table.region caption { font-size: xx-large; }
+       table.region caption { font-weight: bold; }
+       table.region * td { text-align: center; }
+       table.region * td.input_label { text-align: right; }
+       p.clear { clear: both; float: none; }
+       p.hint { margin-top: -32px; }
+     }  
      div#generated_bracket ul  { list-style: disc }
      div#generated_bracket ul ul { list-style: circle }
      div#generated_bracket ul ul ul { list-style: square }
@@ -405,339 +534,571 @@
      div#generated_bracket ul ul ul ul ul{ list-style: circle }
      div#generated_bracket ul ul ul ul ul ul { list-style: square }
      div#generated_bracket p { margin-top: 4em; color: gray; font-size: smaller; }
-     li span.loser { text-decoration: line-through; color: gray; }
+     span.loser { text-decoration: line-through; color: gray; }
+     @media print {
+      h1, h2, h3, p, form, div#help  { display: none; }
+      div#generated_bracket * { font-size: small; }
+      .print { display: inline }
+     }
     </style>
 
-    <title>Final Four Basket Ball Picks Prognosticator</title>
+    <title>ffbbpp: Final Four Basket Ball Picks Prognosticator</title>
   </head>
 
 
-  <body>
-    <h1>ffbbpp</h1>
+  <body onload="ffbbpp.init();">
 
-    <p>this is a web page to generate a bracket for you.</p>
+    <h1 title="Final Four Basket Ball Picks Prognosticator">ffbbpp</h1>
 
-    <ol>
-      <li>fill in form with team specs</li>
-      <li>click the <strong>generate bracket</strong> button</li>
-      <li>wonder at the marvel of technology</li>
-    </ol>
+    <p class="hint"><a href="#help">help</a></p>
+    
+    <h2 class="print">generated bracket</h2>
+
+    <div id="generated_bracket"><span class="loser">none yet</span></div>
 
     <h2>enter teams</h2>
+
+    <p><button type="button" id="gen">generate bracket</button></p>
     
-    <form name="teams">
+    <form name="teams" action="#help">
 
-      <table class="region" cellspacing="5" cellpadding="5">
-        <caption>east</caption>
+      <h3>individual entry</h3>
+
+      <table id="a" class="region" cellspacing="5" cellpadding="5">
+        <caption>A</caption>
 	<thead>
 	  <tr>
 	    <td>seed</td>
 	    <td>name</td>
+	    <td>winner</td>
 	  </tr>
 	</thead>
 	<tbody>
 	  <tr>
 	    <td>1</td>
-	    <td><input name="e1" maxlength="64" /></td>
+	    <td><input name="a1" maxlength="64" /></td>
+	    <td><input type="radio" name="awin" value="1" /></td>
 	  </tr>
 	  <tr>
 	    <td>2</td>
-	    <td><input name="e2" maxlength="64" /></td>
+	    <td><input name="a2" maxlength="64" /></td>
+	    <td><input type="radio" name="awin" value="2" /></td>
 	  </tr>
 	  <tr>
 	    <td>3</td>
-	    <td><input name="e3" maxlength="64" /></td>
+	    <td><input name="a3" maxlength="64" /></td>
+	    <td><input type="radio" name="awin" value="3" /></td>
 	  </tr>
 	  <tr>
 	    <td>4</td>
-	    <td><input name="e4" maxlength="64" /></td>
+	    <td><input name="a4" maxlength="64" /></td>
+	    <td><input type="radio" name="awin" value="4" /></td>
 	  </tr>
 	  <tr>
 	    <td>5</td>
-	    <td><input name="e5" maxlength="64" /></td>
+	    <td><input name="a5" maxlength="64" /></td>
+	    <td><input type="radio" name="awin" value="5" /></td>
 	  </tr>
 	  <tr>
 	    <td>6</td>
-	    <td><input name="e6" maxlength="64" /></td>
+	    <td><input name="a6" maxlength="64" /></td>
+	    <td><input type="radio" name="awin" value="6" /></td>
 	  </tr>
 	  <tr>
 	    <td>7</td>
-	    <td><input name="e7" maxlength="64" /></td>
+	    <td><input name="a7" maxlength="64" /></td>
+	    <td><input type="radio" name="awin" value="7" /></td>
 	  </tr>
 	  <tr>
 	    <td>8</td>
-	    <td><input name="e8" maxlength="64" /></td>
+	    <td><input name="a8" maxlength="64" /></td>
+	    <td><input type="radio" name="awin" value="8" /></td>
 	  </tr>
 	  <tr>
 	    <td>9</td>
-	    <td><input name="e9" maxlength="64" /></td>
+	    <td><input name="a9" maxlength="64" /></td>
+	    <td><input type="radio" name="awin" value="9" /></td>
 	  </tr>
 	  <tr>
 	    <td>10</td>
-	    <td><input name="e10" maxlength="64" /></td>
+	    <td><input name="a10" maxlength="64" /></td>
+	    <td><input type="radio" name="awin" value="10" /></td>
 	  </tr>
 	  <tr>
 	    <td>11</td>
-	    <td><input name="e11" maxlength="64" /></td>
+	    <td><input name="a11" maxlength="64" /></td>
+	    <td><input type="radio" name="awin" value="11" /></td>
 	  </tr>
 	  <tr>
 	    <td>12</td>
-	    <td><input name="e12" maxlength="64" /></td>
+	    <td><input name="a12" maxlength="64" /></td>
+	    <td><input type="radio" name="awin" value="12" /></td>
 	  </tr>
 	  <tr>
 	    <td>13</td>
-	    <td><input name="e13" maxlength="64" /></td>
+	    <td><input name="a13" maxlength="64" /></td>
+	    <td><input type="radio" name="awin" value="13" /></td>
 	  </tr>
 	  <tr>
 	    <td>14</td>
-	    <td><input name="e14" maxlength="64" /></td>
+	    <td><input name="a14" maxlength="64" /></td>
+	    <td><input type="radio" name="awin" value="14" /></td>
 	  </tr>
 	  <tr>
 	    <td>15</td>
-	    <td><input name="e15" maxlength="64" /></td>
+	    <td><input name="a15" maxlength="64" /></td>
+	    <td><input type="radio" name="awin" value="15" /></td>
 	  </tr>
 	  <tr>
 	    <td>16</td>
-	    <td><input name="e16" maxlength="64" /></td>
+	    <td><input name="a16" maxlength="64" /></td>
+	    <td><input type="radio" name="awin" value="16" /></td>
+	  </tr>
+	  <tr>
+	    <td>&nbsp;</td>
+	    <td class="input_label">any team:</td>
+	    <td><input type="radio" name="awin" value="0" checked="checked" /></td>
 	  </tr>
 	</tbody>
       </table>
 
-      <table class="region" cellspacing="5" cellpadding="5">
-        <caption>midwest</caption>
+      <table id="b" class="region" cellspacing="5" cellpadding="5">
+        <caption>B</caption>
 	<thead>
 	  <tr>
 	    <td>seed</td>
 	    <td>name</td>
+	    <td>winner</td>
 	  </tr>
 	</thead>
 	<tbody>
 	  <tr>
 	    <td>1</td>
-	    <td><input name="m1" maxlength="64" /></td>
+	    <td><input name="b1" maxlength="64" /></td>
+	    <td><input type="radio" name="bwin" value="1" /></td>
 	  </tr>
 	  <tr>
 	    <td>2</td>
-	    <td><input name="m2" maxlength="64" /></td>
+	    <td><input name="b2" maxlength="64" /></td>
+	    <td><input type="radio" name="bwin" value="2" /></td>
 	  </tr>
 	  <tr>
 	    <td>3</td>
-	    <td><input name="m3" maxlength="64" /></td>
+	    <td><input name="b3" maxlength="64" /></td>
+	    <td><input type="radio" name="bwin" value="3" /></td>
 	  </tr>
 	  <tr>
 	    <td>4</td>
-	    <td><input name="m4" maxlength="64" /></td>
+	    <td><input name="b4" maxlength="64" /></td>
+	    <td><input type="radio" name="bwin" value="4" /></td>
 	  </tr>
 	  <tr>
 	    <td>5</td>
-	    <td><input name="m5" maxlength="64" /></td>
+	    <td><input name="b5" maxlength="64" /></td>
+	    <td><input type="radio" name="bwin" value="5" /></td>
 	  </tr>
 	  <tr>
 	    <td>6</td>
-	    <td><input name="m6" maxlength="64" /></td>
+	    <td><input name="b6" maxlength="64" /></td>
+	    <td><input type="radio" name="bwin" value="6" /></td>
 	  </tr>
 	  <tr>
 	    <td>7</td>
-	    <td><input name="m7" maxlength="64" /></td>
+	    <td><input name="b7" maxlength="64" /></td>
+	    <td><input type="radio" name="bwin" value="7" /></td>
 	  </tr>
 	  <tr>
 	    <td>8</td>
-	    <td><input name="m8" maxlength="64" /></td>
+	    <td><input name="b8" maxlength="64" /></td>
+	    <td><input type="radio" name="bwin" value="8" /></td>
 	  </tr>
 	  <tr>
 	    <td>9</td>
-	    <td><input name="m9" maxlength="64" /></td>
+	    <td><input name="b9" maxlength="64" /></td>
+	    <td><input type="radio" name="bwin" value="9" /></td>
 	  </tr>
 	  <tr>
 	    <td>10</td>
-	    <td><input name="m10" maxlength="64" /></td>
+	    <td><input name="b10" maxlength="64" /></td>
+	    <td><input type="radio" name="bwin" value="10" /></td>
 	  </tr>
 	  <tr>
 	    <td>11</td>
-	    <td><input name="m11" maxlength="64" /></td>
+	    <td><input name="b11" maxlength="64" /></td>
+	    <td><input type="radio" name="bwin" value="11" /></td>
 	  </tr>
 	  <tr>
 	    <td>12</td>
-	    <td><input name="m12" maxlength="64" /></td>
+	    <td><input name="b12" maxlength="64" /></td>
+	    <td><input type="radio" name="bwin" value="12" /></td>
 	  </tr>
 	  <tr>
 	    <td>13</td>
-	    <td><input name="m13" maxlength="64" /></td>
+	    <td><input name="b13" maxlength="64" /></td>
+	    <td><input type="radio" name="bwin" value="13" /></td>
 	  </tr>
 	  <tr>
 	    <td>14</td>
-	    <td><input name="m14" maxlength="64" /></td>
+	    <td><input name="b14" maxlength="64" /></td>
+	    <td><input type="radio" name="bwin" value="14" /></td>
 	  </tr>
 	  <tr>
 	    <td>15</td>
-	    <td><input name="m15" maxlength="64" /></td>
+	    <td><input name="b15" maxlength="64" /></td>
+	    <td><input type="radio" name="bwin" value="15" /></td>
 	  </tr>
 	  <tr>
 	    <td>16</td>
-	    <td><input name="m16" maxlength="64" /></td>
+	    <td><input name="b16" maxlength="64" /></td>
+	    <td><input type="radio" name="bwin" value="16" /></td>
+	  </tr>
+	  <tr>
+	    <td>&nbsp;</td>
+	    <td class="input_label">any team:</td>
+	    <td><input type="radio" name="bwin" value="0" checked="checked" /></td>
 	  </tr>
 	</tbody>
       </table>
 
-      <table class="region" cellspacing="5" cellpadding="5">
-        <caption>south</caption>
+      <p class="clear">&nbsp;</p>
+
+      <table id="x" class="region" cellspacing="5" cellpadding="5">
+        <caption>X</caption>
 	<thead>
 	  <tr>
 	    <td>seed</td>
 	    <td>name</td>
+	    <td>winner</td>
 	  </tr>
 	</thead>
 	<tbody>
 	  <tr>
 	    <td>1</td>
-	    <td><input name="s1" maxlength="64" /></td>
+	    <td><input name="x1" maxlength="64" /></td>
+	    <td><input type="radio" name="xwin" value="1" /></td>
 	  </tr>
 	  <tr>
 	    <td>2</td>
-	    <td><input name="s2" maxlength="64" /></td>
+	    <td><input name="x2" maxlength="64" /></td>
+	    <td><input type="radio" name="xwin" value="2" /></td>
 	  </tr>
 	  <tr>
 	    <td>3</td>
-	    <td><input name="s3" maxlength="64" /></td>
+	    <td><input name="x3" maxlength="64" /></td>
+	    <td><input type="radio" name="xwin" value="3" /></td>
 	  </tr>
 	  <tr>
 	    <td>4</td>
-	    <td><input name="s4" maxlength="64" /></td>
+	    <td><input name="x4" maxlength="64" /></td>
+	    <td><input type="radio" name="xwin" value="4" /></td>
 	  </tr>
 	  <tr>
 	    <td>5</td>
-	    <td><input name="s5" maxlength="64" /></td>
+	    <td><input name="x5" maxlength="64" /></td>
+	    <td><input type="radio" name="xwin" value="5" /></td>
 	  </tr>
 	  <tr>
 	    <td>6</td>
-	    <td><input name="s6" maxlength="64" /></td>
+	    <td><input name="x6" maxlength="64" /></td>
+	    <td><input type="radio" name="xwin" value="6" /></td>
 	  </tr>
 	  <tr>
 	    <td>7</td>
-	    <td><input name="s7" maxlength="64" /></td>
+	    <td><input name="x7" maxlength="64" /></td>
+	    <td><input type="radio" name="xwin" value="7" /></td>
 	  </tr>
 	  <tr>
 	    <td>8</td>
-	    <td><input name="s8" maxlength="64" /></td>
+	    <td><input name="x8" maxlength="64" /></td>
+	    <td><input type="radio" name="xwin" value="8" /></td>
 	  </tr>
 	  <tr>
 	    <td>9</td>
-	    <td><input name="s9" maxlength="64" /></td>
+	    <td><input name="x9" maxlength="64" /></td>
+	    <td><input type="radio" name="xwin" value="9" /></td>
 	  </tr>
 	  <tr>
 	    <td>10</td>
-	    <td><input name="s10" maxlength="64" /></td>
+	    <td><input name="x10" maxlength="64" /></td>
+	    <td><input type="radio" name="xwin" value="10" /></td>
 	  </tr>
 	  <tr>
 	    <td>11</td>
-	    <td><input name="s11" maxlength="64" /></td>
+	    <td><input name="x11" maxlength="64" /></td>
+	    <td><input type="radio" name="xwin" value="11" /></td>
 	  </tr>
 	  <tr>
 	    <td>12</td>
-	    <td><input name="s12" maxlength="64" /></td>
+	    <td><input name="x12" maxlength="64" /></td>
+	    <td><input type="radio" name="xwin" value="12" /></td>
 	  </tr>
 	  <tr>
 	    <td>13</td>
-	    <td><input name="s13" maxlength="64" /></td>
+	    <td><input name="x13" maxlength="64" /></td>
+	    <td><input type="radio" name="xwin" value="13" /></td>
 	  </tr>
 	  <tr>
 	    <td>14</td>
-	    <td><input name="s14" maxlength="64" /></td>
+	    <td><input name="x14" maxlength="64" /></td>
+	    <td><input type="radio" name="xwin" value="14" /></td>
 	  </tr>
 	  <tr>
 	    <td>15</td>
-	    <td><input name="s15" maxlength="64" /></td>
+	    <td><input name="x15" maxlength="64" /></td>
+	    <td><input type="radio" name="xwin" value="15" /></td>
 	  </tr>
 	  <tr>
 	    <td>16</td>
-	    <td><input name="s16" maxlength="64" /></td>
+	    <td><input name="x16" maxlength="64" /></td>
+	    <td><input type="radio" name="xwin" value="16" /></td>
+	  </tr>
+	  <tr>
+	    <td>&nbsp;</td>
+	    <td class="input_label">any team:</td>
+	    <td><input type="radio" name="xwin" value="0" checked="checked" /></td>
 	  </tr>
 	</tbody>
       </table>
 
-      <table class="region" cellspacing="5" cellpadding="5">
-        <caption>west</caption>
+      <table id="y" class="region" cellspacing="5" cellpadding="5">
+        <caption>Y</caption>
 	<thead>
 	  <tr>
 	    <td>seed</td>
 	    <td>name</td>
+	    <td>winner</td>
 	  </tr>
 	</thead>
 	<tbody>
 	  <tr>
 	    <td>1</td>
-	    <td><input name="w1" maxlength="64" /></td>
+	    <td><input name="y1" maxlength="64" /></td>
+	    <td><input type="radio" name="ywin" value="1" /></td>
 	  </tr>
 	  <tr>
 	    <td>2</td>
-	    <td><input name="w2" maxlength="64" /></td>
+	    <td><input name="y2" maxlength="64" /></td>
+	    <td><input type="radio" name="ywin" value="2" /></td>
 	  </tr>
 	  <tr>
 	    <td>3</td>
-	    <td><input name="w3" maxlength="64" /></td>
+	    <td><input name="y3" maxlength="64" /></td>
+	    <td><input type="radio" name="ywin" value="3" /></td>
 	  </tr>
 	  <tr>
 	    <td>4</td>
-	    <td><input name="w4" maxlength="64" /></td>
+	    <td><input name="y4" maxlength="64" /></td>
+	    <td><input type="radio" name="ywin" value="4" /></td>
 	  </tr>
 	  <tr>
 	    <td>5</td>
-	    <td><input name="w5" maxlength="64" /></td>
+	    <td><input name="y5" maxlength="64" /></td>
+	    <td><input type="radio" name="ywin" value="5" /></td>
 	  </tr>
 	  <tr>
 	    <td>6</td>
-	    <td><input name="w6" maxlength="64" /></td>
+	    <td><input name="y6" maxlength="64" /></td>
+	    <td><input type="radio" name="ywin" value="6" /></td>
 	  </tr>
 	  <tr>
 	    <td>7</td>
-	    <td><input name="w7" maxlength="64" /></td>
+	    <td><input name="y7" maxlength="64" /></td>
+	    <td><input type="radio" name="ywin" value="7" /></td>
 	  </tr>
 	  <tr>
 	    <td>8</td>
-	    <td><input name="w8" maxlength="64" /></td>
+	    <td><input name="y8" maxlength="64" /></td>
+	    <td><input type="radio" name="ywin" value="8" /></td>
 	  </tr>
 	  <tr>
 	    <td>9</td>
-	    <td><input name="w9" maxlength="64" /></td>
+	    <td><input name="y9" maxlength="64" /></td>
+	    <td><input type="radio" name="ywin" value="9" /></td>
 	  </tr>
 	  <tr>
 	    <td>10</td>
-	    <td><input name="w10" maxlength="64" /></td>
+	    <td><input name="y10" maxlength="64" /></td>
+	    <td><input type="radio" name="ywin" value="10" /></td>
 	  </tr>
 	  <tr>
 	    <td>11</td>
-	    <td><input name="w11" maxlength="64" /></td>
+	    <td><input name="y11" maxlength="64" /></td>
+	    <td><input type="radio" name="ywin" value="11" /></td>
 	  </tr>
 	  <tr>
 	    <td>12</td>
-	    <td><input name="w12" maxlength="64" /></td>
+	    <td><input name="y12" maxlength="64" /></td>
+	    <td><input type="radio" name="ywin" value="12" /></td>
 	  </tr>
 	  <tr>
 	    <td>13</td>
-	    <td><input name="w13" maxlength="64" /></td>
+	    <td><input name="y13" maxlength="64" /></td>
+	    <td><input type="radio" name="ywin" value="13" /></td>
 	  </tr>
 	  <tr>
 	    <td>14</td>
-	    <td><input name="w14" maxlength="64" /></td>
+	    <td><input name="y14" maxlength="64" /></td>
+	    <td><input type="radio" name="ywin" value="14" /></td>
 	  </tr>
 	  <tr>
 	    <td>15</td>
-	    <td><input name="w15" maxlength="64" /></td>
+	    <td><input name="y15" maxlength="64" /></td>
+	    <td><input type="radio" name="ywin" value="15" /></td>
 	  </tr>
 	  <tr>
 	    <td>16</td>
-	    <td><input name="w16" maxlength="64" /></td>
+	    <td><input name="y16" maxlength="64" /></td>
+	    <td><input type="radio" name="ywin" value="16" /></td>
+	  </tr>
+	  <tr>
+	    <td>&nbsp;</td>
+	    <td class="input_label">any team:</td>
+	    <td><input type="radio" name="ywin" value="0" checked="checked" /></td>
 	  </tr>
 	</tbody>
       </table>
 
-      <p class="clear"><button onclick="ffbbpp.generate_bracket();return false">generate bracket</button></p>
-    
+      <p class="clear">&nbsp;</p>
+      
+      <div id="me_textarea" class="hide">
+        <h3>mass entry</h3>
+
+        <textarea rows="8" cols="64" name="mass_input">{
+  "A" : [
+    { "name" : "", "seed" : "1" },
+    { "name" : "", "seed" : "2" },
+    { "name" : "", "seed" : "3" },
+    { "name" : "", "seed" : "4" },
+    { "name" : "", "seed" : "5" },
+    { "name" : "", "seed" : "6" },
+    { "name" : "", "seed" : "7" },
+    { "name" : "", "seed" : "8" },
+    { "name" : "", "seed" : "9" },
+    { "name" : "", "seed" : "10" },
+    { "name" : "", "seed" : "11" },
+    { "name" : "", "seed" : "12" },
+    { "name" : "", "seed" : "13" },
+    { "name" : "", "seed" : "14" },
+    { "name" : "", "seed" : "15" },
+    { "name" : "", "seed" : "16" }
+  ],
+  "B" : [
+    { "name" : "", "seed" : "1" },
+    { "name" : "", "seed" : "2" },
+    { "name" : "", "seed" : "3" },
+    { "name" : "", "seed" : "4" },
+    { "name" : "", "seed" : "5" },
+    { "name" : "", "seed" : "6" },
+    { "name" : "", "seed" : "7" },
+    { "name" : "", "seed" : "8" },
+    { "name" : "", "seed" : "9" },
+    { "name" : "", "seed" : "10" },
+    { "name" : "", "seed" : "11" },
+    { "name" : "", "seed" : "12" },
+    { "name" : "", "seed" : "13" },
+    { "name" : "", "seed" : "14" },
+    { "name" : "", "seed" : "15" },
+    { "name" : "", "seed" : "16" }
+  ],
+  "X" : [
+    { "name" : "", "seed" : "1" },
+    { "name" : "", "seed" : "2" },
+    { "name" : "", "seed" : "3" },
+    { "name" : "", "seed" : "4" },
+    { "name" : "", "seed" : "5" },
+    { "name" : "", "seed" : "6" },
+    { "name" : "", "seed" : "7" },
+    { "name" : "", "seed" : "8" },
+    { "name" : "", "seed" : "9" },
+    { "name" : "", "seed" : "10" },
+    { "name" : "", "seed" : "11" },
+    { "name" : "", "seed" : "12" },
+    { "name" : "", "seed" : "13" },
+    { "name" : "", "seed" : "14" },
+    { "name" : "", "seed" : "15" },
+    { "name" : "", "seed" : "16" }
+  ],
+  "Y" : [
+    { "name" : "", "seed" : "1" },
+    { "name" : "", "seed" : "2" },
+    { "name" : "", "seed" : "3" },
+    { "name" : "", "seed" : "4" },
+    { "name" : "", "seed" : "5" },
+    { "name" : "", "seed" : "6" },
+    { "name" : "", "seed" : "7" },
+    { "name" : "", "seed" : "8" },
+    { "name" : "", "seed" : "9" },
+    { "name" : "", "seed" : "10" },
+    { "name" : "", "seed" : "11" },
+    { "name" : "", "seed" : "12" },
+    { "name" : "", "seed" : "13" },
+    { "name" : "", "seed" : "14" },
+    { "name" : "", "seed" : "15" },
+    { "name" : "", "seed" : "16" }
+  ]
+}</textarea>
+
+      </div>
+
     </form>
 
-    <h2>generated bracket</h2>
+    <div id="help">
 
-    <div id="generated_bracket">none yet</div>
+      <a name="help"><h2>help</h2></a>
+  
+      <p>This is a web page to generate a bracket for you. You can use only one
+      of the individual entry or mass entry methods; however, you can keep
+      generating different brackets once the teams are in. In order to use this
+      form for years to come, the regions are named like the buttons on a game
+      console (A, B, X, Y) instead of the regional names, as they may change
+      from year to year. For the final four, first the winner between regions A
+      and B and the winner between regions X and Y are both determined; then,
+      those two winners play for the championship.</p>
+  
+      <p>If you use the <strong>individual entry</strong> section, follow the
+      steps given below.</p>
+  
+      <ol>
+        <li>fill in form with team names according to their seeding</li>
+	<li>you may select a pre-determined winner of each region, or not</li>
+        <li>click the <strong>generate bracket</strong> button</li>
+        <li>wonder at the marvel of technology</li>
+      </ol>
+  
+      <div id="me_help" class="hide">
+  
+        <p>If you use the <strong>mass entry</strong> section, then you need to
+	enter a <a href="http://json.org/" target="_blank">JSON</a> object for your picks
+	following the guidelines given below.</p>
+        
+        <ul>
+          <li>object has 4 keys
+            <ol>
+    	      <li>A</li>
+    	      <li>B</li>
+    	      <li>X</li>
+    	      <li>Y</li>
+    	    </ol>
+          </li>
+          <li>each key points to an array of 16 team objects, one for each seed</li>
+          <li>each team object <em>must</em> have the following 2 keys
+            <ul>
+    	      <li><strong>name</strong>: school name</li>
+    	      <li><strong>seed</strong>: seeding rank</li>
+    	    </ul>
+          </li>
+	  <li>each team object <em>may</em> have the following optional key
+	    <ul>
+	      <li><strong>winner</strong>: boolean value to determine the winner of the region, can be true only once per region</li>
+	    </ul>
+	  </li>  
+	  <li>[hanging] commas at the end of an array or object will cause the JSON parsing to fail</li>
+        </ul>
+        
+	<p>And then you need to click the <strong>generate bracket</strong> button, and wonder &hellip;</p>
+
+      </div>  
+    </div>
 
   </body>
 </html>
